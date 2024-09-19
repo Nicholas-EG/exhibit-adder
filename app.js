@@ -39,21 +39,18 @@ function run(numberOfExhibits) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // proof of concept, just takes one article and creates one coversheet and merges them together
 async function mergeCoverAndExhibit(num) {
   // TODO: make the article naming convention dynamic
   const uint8array = fs.readFileSync('./articles/test.pdf');
   const pdfDoc = await PDFDocument.load(uint8array);
-  run(num);
-  setTimeout(() => {console.log("check");
-  }, "2000");
-  /** FIXME: the line below generates an error if the coversheet is newly created. fs is unable to find the coversheet.
-   *  Possible that the file is not fully loaded when run exits, so fs is unable to find it. Possible fix would be
-   *  to add a short sleep() period right after run to give the computer time to finalize placing the docs.
-   */
   // TODO: make the naming convention dynamic
-  const coverletter = fs.readFileSync('./coversheets/cover A.pdf');
+  const name = "A";
+  const coverletter = fs.readFileSync(`./coversheets/cover ${name}.pdf`);
   const pdfDoc2 = await PDFDocument.load(coverletter);
   const copiedpages = await pdfDoc2.copyPages(pdfDoc, [...Array(pdfDoc.getPageCount()).keys()]);
   for(i in copiedpages) {
@@ -62,4 +59,5 @@ async function mergeCoverAndExhibit(num) {
   fs.writeFileSync('./result.pdf', await pdfDoc2.save());
 }
 
+run(1);
 mergeCoverAndExhibit(1);
