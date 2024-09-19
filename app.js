@@ -1,5 +1,6 @@
 const { PDFDocument, StandardFonts } = require('pdf-lib'); // api available at https://pdf-lib.js.org/docs/api/
 const fs = require('fs');
+const puppeteer = require('puppeteer');
 
 async function makeCoverPage(name) {
   // set up document 
@@ -44,7 +45,7 @@ function sleep(ms) {
 }
 
 // proof of concept, just takes one article and creates one coversheet and merges them together
-async function mergeCoverAndExhibit(num) {
+async function mergeCoverAndExhibit() {
   // TODO: make the article naming convention dynamic
   const uint8array = fs.readFileSync('./articles/test.pdf');
   const pdfDoc = await PDFDocument.load(uint8array);
@@ -59,5 +60,20 @@ async function mergeCoverAndExhibit(num) {
   fs.writeFileSync('./result.pdf', await pdfDoc2.save());
 }
 
-run(1);
-mergeCoverAndExhibit(1);
+async function getExhibits() {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.goto('https://www.google.com/?client=safari', {
+    waitUntil: 'networkidle2',
+  });
+  await page.pdf({
+    path: './articles/test.pdf',
+  });
+  await browser.close();
+}
+
+/** TESTING */
+getExhibits().then(() => { 
+  run(1); 
+  mergeCoverAndExhibit(); 
+});
