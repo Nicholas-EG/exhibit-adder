@@ -1,79 +1,89 @@
 const { PDFDocument, StandardFonts } = require('pdf-lib'); // api available at https://pdf-lib.js.org/docs/api/
 const fs = require('fs');
+const fsPromises = require('fs/promises');
 const puppeteer = require('puppeteer');
 
 async function makeCoverPage(name) {
-  // set up document 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage();
   const timesFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
   page.setFont(timesFont);
-
-  // write on page
   const text = `Exhibit ${name}`;
   const fontSize = 30;
   const textWidth = timesFont.widthOfTextAtSize(text, fontSize);
   const { width, height } = page.getSize();
-  page.moveTo((width / 2) - (textWidth / 2), height / 2); 
-  page.drawText(text, {size: fontSize});
-
-  // save document
+  page.moveTo((width / 2) - (textWidth / 2), height / 2);
+  page.drawText(text, { size: fontSize });
+  // return await pdfDoc.save();
   fs.writeFileSync(`./coversheets/cover ${name}.pdf`, await pdfDoc.save());
 }
 
-// the naming convention for exhibit sheets is to name them 'Exhibit A' through 'Exhibit Z'
-// then 'Exhibit AA', 'Exhibit BB', etc.  through 'Exhibit ZZ'
-// then 'Exhibit AAA', 'Exhibit BBB', etc.
-function run(numberOfExhibits) {
+/***
+ * the naming convention for exhibit sheets is to name them 'Exhibit A' through 'Exhibit Z'
+ * then 'Exhibit AA', 'Exhibit BB', etc.  through 'Exhibit ZZ'
+ * then 'Exhibit AAA', 'Exhibit BBB', etc. 
+ */
+function generateExhibitName(exhibitNumber) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  for(let i = 0; i < numberOfExhibits; i++) {
-    let name = '';
+  let name = '';
+  let numberOfLettersInName = Math.ceil(exhibitNumber / alphabet.length) + (exhibitNumber % alphabet.length === 0 ? 1 : 0);
+  for (let j = 0; j < numberOfLettersInName; j++) {
+    name = alphabet[exhibitNumber % alphabet.length] + name;
+  }
+  return name;
+}
 
-    // calculate how many letters will be in the name
-    let loops = Math.ceil(i / alphabet.length) + (i % alphabet.length === 0 ? 1 : 0);
-    for(let j = 0; j < loops; j++) {
-
-      // calculate which letter to put in the name
-      name = alphabet[i % alphabet.length] + name;
-    }
-    makeCoverPage(name);
+/***
+ * @param frontDocument - a string path to the desired document
+ * @param rearDocument - a string path to the desired document
+ */
+async function mergeDocuments(frontDocument, rearDocument) {
+  try {
+    const frontBinary = fs.readFileSync(frontDocument);
+    const frontPDF = await PDFDocument.load(frontBinary);
+    const rearBinary = fs.readFileSync(rearDocument);
+    const rearPDF = await PDFDocument.load(rearBinary);
+    const copiedPages = await frontPDF.copyPages(rearPDF, [...Array(rearPDF.getPageCount()).keys()]);
+    copiedPages.forEach((page) => {
+      frontPDF.addPage(page);
+    })
+    fs.writeFileSync('./result.pdf', await frontPDF.save());
+  } catch (frontFileDoesNotExist) {
+    const rearBinary = fs.readFileSync(rearDocument);
+    const rearPDF = await PDFDocument.load(rearBinary);
+    fs.writeFileSync('./result.pdf', await rearPDF.save());
   }
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// proof of concept, just takes one article and creates one coversheet and merges them together
-async function mergeCoverAndExhibit() {
-  // TODO: make the article naming convention dynamic
-  const uint8array = fs.readFileSync('./articles/test.pdf');
-  const pdfDoc = await PDFDocument.load(uint8array);
-  // TODO: make the naming convention dynamic
-  const name = "A";
-  const coverletter = fs.readFileSync(`./coversheets/cover ${name}.pdf`);
-  const pdfDoc2 = await PDFDocument.load(coverletter);
-  const copiedpages = await pdfDoc2.copyPages(pdfDoc, [...Array(pdfDoc.getPageCount()).keys()]);
-  for(i in copiedpages) {
-    pdfDoc2.addPage(copiedpages[i]);
-  }
-  fs.writeFileSync('./result.pdf', await pdfDoc2.save());
-}
-
-async function getExhibits() {
+async function getArticles(urls) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
-  await page.goto('https://www.google.com/?client=safari', {
-    waitUntil: 'networkidle2',
-  });
-  await page.pdf({
-    path: './articles/test.pdf',
-  });
+  for (i in urls) {
+    await page.goto(`${urls[i]}`, {
+      waitUntil: 'networkidle2',
+    });
+    fs.writeFileSync(`./articles/article ${generateExhibitName(i)}.pdf`, await page.pdf());
+  }
   await browser.close();
 }
 
+async function cleanFiles(paths) {
+  paths.forEach(path => {
+    fsPromises.rm(path);
+  });
+}
+
+async function run(urls) {
+  getArticles(urls).then(console.log('done'));
+}
+
 /** TESTING */
-getExhibits().then(() => { 
-  run(1); 
-  mergeCoverAndExhibit(); 
-});
+const urls = [
+  'https://www.google.com',
+  // 'https://elfaro.net/es/202409/el_salvador/27557/presidencia-ordeno-una-operacion-de-espionaje-contra-periodistas-y-politicos',
+  'https://pptr.dev/browsers-api/browsers.candownload/#parameters',
+];
+
+// getArticle(urls[1], 'B');
+run(urls);
+// mergeDocuments('./coversheets/cover A.pdf', './coversheets/cover B.pdf')
