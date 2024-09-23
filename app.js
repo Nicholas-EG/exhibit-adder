@@ -56,13 +56,17 @@ async function mergeDocuments(frontDocument, rearDocument) {
 }
 
 async function getArticles(urls) {
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    args: ['--no-sandbox']
+  });
   const page = await browser.newPage();
   for (i in urls) {
     await page.goto(`${urls[i]}`, {
       waitUntil: 'networkidle2',
     });
-    fs.writeFileSync(`./articles/article ${generateExhibitName(i)}.pdf`, await page.pdf());
+    await page.pdf({
+      path: `./articles/article ${generateExhibitName(i)}.pdf`
+    })
   }
   await browser.close();
 }
