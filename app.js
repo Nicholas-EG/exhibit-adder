@@ -15,7 +15,8 @@ async function makeCoverPage(name) {
   page.moveTo((width / 2) - (textWidth / 2), height / 2);
   page.drawText(text, { size: fontSize });
   // return await pdfDoc.save();
-  fs.writeFileSync(`./coversheets/cover ${name}.pdf`, await pdfDoc.save());
+  const uInt8Array = await pdfDoc.save();
+  return uInt8Array;
 }
 
 /***
@@ -34,41 +35,27 @@ function generateExhibitName(exhibitNumber) {
 }
 
 /***
- * @param frontDocument - a string path to the desired document
- * @param rearDocument - a string path to the desired document
+ * @param frontPDF - a PDFDocument object
+ * @param rearPDF - a PDFDocument object
  */
-async function mergeDocuments(frontDocument, rearDocument) {
-  try {
-    const frontBinary = fs.readFileSync(frontDocument);
-    const frontPDF = await PDFDocument.load(frontBinary);
-    const rearBinary = fs.readFileSync(rearDocument);
-    const rearPDF = await PDFDocument.load(rearBinary);
+async function mergeDocuments(frontPDF, rearPDF) {
     const copiedPages = await frontPDF.copyPages(rearPDF, [...Array(rearPDF.getPageCount()).keys()]);
     copiedPages.forEach((page) => {
       frontPDF.addPage(page);
     })
-    fs.writeFileSync('./result.pdf', await frontPDF.save());
-  } catch (frontFileDoesNotExist) {
-    const rearBinary = fs.readFileSync(rearDocument);
-    const rearPDF = await PDFDocument.load(rearBinary);
-    fs.writeFileSync('./result.pdf', await rearPDF.save());
-  }
 }
 
-async function getArticles(urls) {
+async function getArticle(url) {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox']
   });
   const page = await browser.newPage();
-  for (i in urls) {
-    await page.goto(`${urls[i]}`, {
-      waitUntil: 'networkidle2',
-    });
-    await page.pdf({
-      path: `./articles/article ${generateExhibitName(i)}.pdf`
-    })
-  }
+  await page.goto(`${url}`, {
+    waitUntil: 'networkidle2',
+  });
+  const uInt8Array = await page.pdf();
   await browser.close();
+  return uInt8Array;
 }
 
 async function cleanFiles(paths) {
@@ -78,16 +65,22 @@ async function cleanFiles(paths) {
 }
 
 async function run(urls) {
-  getArticles(urls).then(console.log('done'));
+  const result = await PDFDocument.create();
+  for (i in urls) {
+    const name = generateExhibitName(i);
+    const cover = await PDFDocument.load(await makeCoverPage(name));
+    const article = await PDFDocument.load(await getArticle(urls[i]));
+    mergeDocuments(result, cover);
+    mergeDocuments(result, article);
+  }
+  fs.writeFileSync('./result.pdf', await result.save());
 }
 
 /** TESTING */
 const urls = [
   'https://www.google.com',
-  // 'https://elfaro.net/es/202409/el_salvador/27557/presidencia-ordeno-una-operacion-de-espionaje-contra-periodistas-y-politicos',
+  'https://elfaro.net/es/202409/el_salvador/27557/presidencia-ordeno-una-operacion-de-espionaje-contra-periodistas-y-politicos',
   'https://pptr.dev/browsers-api/browsers.candownload/#parameters',
 ];
 
-// getArticle(urls[1], 'B');
 run(urls);
-// mergeDocuments('./coversheets/cover A.pdf', './coversheets/cover B.pdf')
